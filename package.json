@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12",
+    "esbuild": "^0.23.1",
+    "typescript": "^5.5.4",
+    "workbox-build": "^7.1.1"
+  }
+}
