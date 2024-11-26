@@ -2,7 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 var WebSocket = require("ws");
 // import {Data, ServerToClientDiffs, ClientToServerDiff, ServerToClientDiff, ServerToClientMsg} from "./interface.js";
-var wss = new WebSocket.Server({ port: 8080 });
+var port = 8080;
+if (process.env.PORT !== undefined) {
+    var n = parseInt(process.env.PORT);
+    if (!isNaN(n))
+        port = n;
+}
+var wss = new WebSocket.Server({ port: port });
 /*
 Ca peut demenader un
 */
@@ -197,4 +203,4 @@ wss.on('connection', function connection(ws) {
         broadcastMsg(ws, msg, currentId);
     });
 });
-console.log("Server started.");
+console.log("Server started on port " + port);
