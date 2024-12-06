@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var WebSocket = require("ws");
+var http = require("http");
 // import {Data, ServerToClientDiffs, ClientToServerDiff, ServerToClientDiff, ServerToClientMsg} from "./interface.js";
 var port = 8080;
 if (process.env.PORT !== undefined) {
@@ -8,7 +9,27 @@ if (process.env.PORT !== undefined) {
     if (!isNaN(n))
         port = n;
 }
-var wss = new WebSocket.Server({ port: port });
+// Define the port and hostname
+var hostname = '127.0.0.1'; // localhost
+// Create the server
+var server = http.createServer(function (req, res) {
+    // Set the response HTTP headers
+    res.statusCode = 200; // OK
+    res.setHeader('Content-Type', 'text/html');
+    res.end('Server ready! <a href="https://amblafont.github.io/graph-editor/index.html?server='
+        + 'wss://' + req.headers.host
+        + '">Connect from the diagram editor</a>.');
+});
+// Start the server
+server.listen(port, hostname, function () {
+    console.log("Server running at http://".concat(hostname, ":").concat(port, "/"));
+});
+var wss = new WebSocket.Server({ noServer: true });
+server.on('upgrade', function upgrade(request, socket, head) {
+    wss.handleUpgrade(request, socket, head, function done(ws) {
+        wss.emit('connection', ws, request);
+    });
+});
 /*
 Ca peut demenader un
 */
@@ -203,4 +224,3 @@ wss.on('connection', function connection(ws) {
         broadcastMsg(ws, msg, currentId);
     });
 });
-console.log("Server started on port " + port);
