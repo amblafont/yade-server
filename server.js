@@ -11,6 +11,9 @@ if (process.env.PORT !== undefined) {
 }
 // Define the port and hostname
 var hostname = '127.0.0.1'; // localhost
+if (process.env.HOSTNAME !== undefined) {
+    hostname = process.env.HOSTNAME;
+}
 // Create the server
 var server = http.createServer(function (req, res) {
     // Set the response HTTP headers
