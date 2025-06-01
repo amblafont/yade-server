@@ -10,7 +10,7 @@ if (process.env.PORT !== undefined) {
         port = n;
 }
 // Define the port and hostname
-var hostname = '127.0.0.1'; // localhost
+var hostname = '0.0.0.0'; // localhost
 if (process.env.YADEHOSTNAME !== undefined) {
     hostname = process.env.YADEHOSTNAME;
 }
