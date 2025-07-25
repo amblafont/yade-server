@@ -9,7 +9,7 @@ A [test server](https://yade-server-test.onrender.com/) is available (you may ha
 
 # How to set up your own server for free
 
-1. Create a free account on some free (nodejs) hosting platform such as render.com, replit.com. If you have an account in some French research institute (such as INRIA or CNRS) you can also use  https://plmlab.math.cnrs.fr/.
+1. Create a free account on some free (nodejs) hosting platform such as render.com, replit.com. If you have an account in some French research institute (such as INRIA or CNRS) you can also use  [https://plmlab.math.cnrs.fr/](https://plmshift.math.cnrs.fr/).
 2. Create a new (node.js) project by importing this github repository
 3. Visit the homepage of your newly created website: there you will find a link to the diagram editor that will automatically connect to your server.
 
