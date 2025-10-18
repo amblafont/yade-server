@@ -37,21 +37,42 @@ server.on('upgrade', function upgrade(request, socket, head) {
 Ca peut demenader un
 */
 var depthHistory = 20;
-var queue = [];
-var nextId = 0;
-var lastBreakId = null;
-var lastSnapshot = null;
-function closeAll(reason) {
-    wss.clients.forEach(function (ws) {
+function freshSession(name) {
+    return { name: name, queue: [], nextId: 0, lastBreakId: null, lastSnapshot: null };
+}
+var sessions = {};
+function getSessionFromClient(ws) {
+    var sessionName = getSessionName(ws);
+    if (!(sessionName in sessions))
+        return null;
+    return sessions[sessionName];
+}
+// let queue:item[] = [];
+// let nextId = 0;
+// let lastBreakId:null|number = null; 
+// let lastSnapshot:null|{msg:Data,id : number, snapshot:true, sender:WebSocket.WebSocket} = null;
+function closeSession(session, reason) {
+    getSessionClients(session).forEach(function (ws) {
         closeConnection(ws, reason);
     });
+    console.log("Closing session " + session.name + ": " + reason);
+    delete sessions[session.name];
+    var ks = Object.keys(sessions);
+    console.log("Remaining opened sessions: " + ks.join(", "));
 }
-function restart() {
-    queue = [];
-    nextId = 0;
-    lastBreakId = null;
-    lastSnapshot = null;
-    console.log("Server restarted.");
+function closeIfNoClient(session) {
+    var nclient = getSessionClients(session).length;
+    // for (let ws of wss.clients) {
+    //   if (getSessionName(ws) == session)
+    //     nclient++;
+    // }
+    if (nclient > 0) {
+        console.log("Session " + session.name + ": still " + nclient + " connected");
+    }
+    else {
+        closeSession(session, "no client left");
+    }
+    // console.log("Deleting session " + session + " (no client left).");
 }
 function sendToClient(ws, data) {
     ws.send(JSON.stringify(data));
@@ -64,24 +85,24 @@ function closeConnection(ws, reason) {
     console.log("closing connection: %s", reason);
     ws.close(1011, reason);
 }
-function sendQueueSince(ws, expectedId) {
+function sendQueueSince(session, ws, expectedId) {
     // strictly bigger is impossible (already checked before)
-    if (expectedId >= nextId) {
+    if (expectedId >= session.nextId) {
         return true;
     }
     var idFirst = expectedId;
     var diffs = [];
     // looking if snapshot is available
-    if (lastSnapshot != null && lastSnapshot.id >= expectedId) {
-        idFirst = lastSnapshot.id + 1;
-        diffs.push(lastSnapshot);
+    if (session.lastSnapshot != null && session.lastSnapshot.id >= expectedId) {
+        idFirst = session.lastSnapshot.id + 1;
+        diffs.push(session.lastSnapshot);
     }
-    var depth = nextId - idFirst;
-    if (depth > queue.length) {
-        var clients = chooseSnapshotClient();
+    var depth = session.nextId - idFirst;
+    if (depth > session.queue.length) {
+        var clients = chooseSnapshotClient(session);
         if (clients.length == 0) {
             var reason = "no updated client to get data from (server restarted)";
-            closeAll(reason);
+            closeSession(session, reason);
             return false;
         }
         sendRequestSnapshot(clients);
@@ -89,7 +110,7 @@ function sendQueueSince(ws, expectedId) {
     }
     // let data:ServerToClientDiff[] = []; // queue.slice(-depth);
     for (var i = 0; i < depth; i++) {
-        var msg = queue[queue.length - depth + i];
+        var msg = session.queue[session.queue.length - depth + i];
         diffs.push(msg);
         // diffs.push({isSender : ws === msg.sender, msg: msg.msg
         //     , id:msg.id, snapshot:msg.snapshot
@@ -109,7 +130,9 @@ function sendQueueSince(ws, expectedId) {
     sendToClient(ws, stuff2);
     return true;
 }
+// we add those properties to each ws client.
 var expectedIdKey = "expectedId";
+var sessionNameKey = "sessionName";
 function hasProperty(obj, key) {
     return key in obj;
 }
@@ -126,50 +149,75 @@ function setExpectedId(ws, id) {
     var ws2 = ws;
     ws2[expectedIdKey] = id;
 }
-function minimalId() {
-    var id = nextId - queue.length - 1;
-    if (lastSnapshot != null && lastSnapshot.id > id)
-        return lastSnapshot.id;
+function getSessionName(ws) {
+    if (hasProperty(ws, sessionNameKey)) {
+        return ws[sessionNameKey];
+    }
+    console.log("client has not " + sessionNameKey);
+    return "";
+}
+function setSessionName(ws, sessionName) {
+    var ws2 = ws;
+    ws2[sessionNameKey] = sessionName;
+}
+function minimalId(session) {
+    var id = session.nextId - session.queue.length - 1;
+    if (session.lastSnapshot != null && session.lastSnapshot.id > id)
+        return session.lastSnapshot.id;
     return id;
 }
-function chooseSnapshotClient() {
+// function getSessionClients(session:session):WebSocket.WebSocket[] {
+//   let clients = [];
+//   for (client of wss.clients)
+//   return clients;
+// }
+function chooseSnapshotClient(session) {
     var clients = [];
-    var minId = minimalId();
-    wss.clients.forEach(function (ws) {
+    var minId = minimalId(session);
+    getSessionClients(session).forEach(function (ws) {
         if (getExpectedId(ws) >= minId)
             clients.push(ws);
     });
     return clients;
 }
-function saveMsg(ws, msg) {
+function saveMsg(session, ws, msg) {
     if (!msg.history)
         return;
-    queue.push({ msg: msg.msg, sender: ws, id: nextId, snapshot: msg.snapshot });
-    nextId++;
-    queue = queue.slice(-depthHistory);
-    console.log("saving msg; queue length: %d", queue.length);
+    session.queue.push({ msg: msg.msg, sender: ws, id: session.nextId, snapshot: msg.snapshot });
+    session.nextId++;
+    session.queue = session.queue.slice(-depthHistory);
+    console.log("saving msg; queue length: %d", session.queue.length);
 }
-function handleReceiveStart(ws, msg) {
+function handleReceiveStart(session, ws, msg) {
     if (!msg.snapshot) {
         sendRequestSnapshot([ws]);
         return;
     }
-    var id = nextId;
-    lastBreakId = id;
-    nextId++;
+    var id = session.nextId;
+    session.lastBreakId = id;
+    session.nextId++;
     // saveMsg(ws, msg);
-    updateLastSnapshot(ws, msg.msg, id);
-    broadcastMsg(ws, msg, id);
+    updateLastSnapshot(session, ws, msg.msg, id);
+    broadcastMsg(session, ws, msg, id);
 }
-function updateLastSnapshot(ws, msg, id) {
-    lastSnapshot = { id: id, snapshot: true, msg: msg, sender: ws };
+function updateLastSnapshot(session, ws, msg, id) {
+    session.lastSnapshot = { id: id, snapshot: true, msg: msg, sender: ws };
 }
-function broadcastMsg(ws, msg, id) {
+function getSessionClients(session) {
+    var clients = [];
+    wss.clients.forEach(function each(client) {
+        if (getSessionName(client) == session.name)
+            clients.push(client);
+    });
+    return clients;
+}
+function broadcastMsg(session, ws, msg, id) {
     if (!msg.broadcast) {
         return;
     }
-    console.log("sending diff to %d clients", wss.clients.size);
-    wss.clients.forEach(function each(client) {
+    var clients = getSessionClients(session);
+    console.log("sending diff to %d clients", clients.length);
+    clients.forEach(function each(client) {
         var data = { msg: msg.msg, isSender: client === ws, id: id,
             snapshot: msg.snapshot
         };
@@ -181,49 +229,66 @@ function broadcastMsg(ws, msg, id) {
         }
     });
 }
-wss.on('connection', function connection(ws) {
-    console.log("new connection");
+wss.on('connection', function connection(ws, request) {
+    // extract session name from url
+    var url = request.url;
+    console.log("new connection with url: " + url);
+    if (url === undefined) {
+        closeConnection(ws, "no session specified");
+        return;
+    }
+    var sessionName = url.substring(1); // removing leading /
+    if (sessionName == "")
+        sessionName = "default";
+    console.log("session name: " + sessionName);
+    setSessionName(ws, sessionName);
+    var session = getSessionFromClient(ws);
+    if (session === null) {
+        console.log("Creating new session: " + sessionName);
+        session = freshSession(sessionName);
+        sessions[sessionName] = session;
+    }
     // */
     ws.on('error', console.error);
     ws.on('close', function close() {
-        if (wss.clients.size == 0)
-            restart();
+        // if (wss.clients.size == 0)
+        closeIfNoClient(session);
     });
-    ws.on('message', function message(data, isBinary) {
+    ws.on('message', function message(data) {
         var str = data.toString();
         ;
-        console.log('received: %s', str.substring(0, 200));
+        console.log('received (' + session.name + '): %s', str.substring(0, 200));
         // console.log('the queue:');
         // console.log(queue);
         var msg = JSON.parse(str);
         // if (msg.expectedId > getExpectedId(ws))
         setExpectedId(ws, msg.expectedId);
-        if (msg.expectedId > nextId) {
-            closeConnection(ws, "impossible: expectedId(" + msg.expectedId + ") > nextId(" + nextId + ")");
+        if (msg.expectedId > session.nextId) {
+            closeConnection(ws, "impossible: expectedId(" + msg.expectedId + ") > nextId(" + session.nextId + ")");
             return;
         }
-        if (lastSnapshot === null) {
+        if (session.lastSnapshot === null) {
             console.log("no snapshot available (prelude)");
-            handleReceiveStart(ws, msg);
+            handleReceiveStart(session, ws, msg);
             return;
         }
-        if (!sendQueueSince(ws, msg.expectedId))
+        if (!sendQueueSince(session, ws, msg.expectedId))
             return;
-        if (lastBreakId !== null && msg.expectedId <= lastBreakId) {
+        if (session.lastBreakId !== null && msg.expectedId <= session.lastBreakId) {
             return;
         }
         if (msg.break)
-            lastBreakId = nextId;
-        if (msg.snapshot && lastSnapshot.id > msg.expectedId) {
-            updateLastSnapshot(ws, msg.msg, msg.expectedId - 1);
+            session.lastBreakId = session.nextId;
+        if (msg.snapshot && session.lastSnapshot.id > msg.expectedId) {
+            updateLastSnapshot(session, ws, msg.msg, msg.expectedId - 1);
         }
         // msg.id = currentId;
         var currentId;
         if (msg.history)
-            currentId = nextId;
+            currentId = session.nextId;
         else
-            currentId = nextId - 1;
-        saveMsg(ws, msg);
-        broadcastMsg(ws, msg, currentId);
+            currentId = session.nextId - 1;
+        saveMsg(session, ws, msg);
+        broadcastMsg(session, ws, msg, currentId);
     });
 });
