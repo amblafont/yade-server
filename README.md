@@ -5,7 +5,7 @@ The server can manage multiple independent sessions (created on demand, see belo
 
 # Give it a try!
 
-A [test server](https://yade-server-test.onrender.com/) is available (you may have to wait a little bit before the server is ready, if it is not currently used). Beware that anyone who connects to this (public) server will be able to edit the whiteboard. Beware that the server shuts down after some time because of the limitation of the free hosting platform (you then need to revisit the above link to wake it up).
+A [test server](https://amblafont.github.io/graph-editor/index.html?server=wss://yade-server-yade.apps.math.cnrs.fr/test) is available. Beware that anyone who connects to this (public) server will be able to edit the whiteboard.
 
 # How to set up your own server for free
 
