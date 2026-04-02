@@ -10,7 +10,7 @@ A [test server](https://amblafont.github.io/graph-editor/index.html?server=wss:/
 # How to set up your own server for free
 
 1. Create a free account on some free (nodejs) hosting platform such as render.com, replit.com. If you have an account in some French research institute (such as INRIA or CNRS) you can also use  [https://plmshift.math.cnrs.fr/](https://plmshift.math.cnrs.fr/).
-2. Create a new (node.js) project by importing this github repository
+2. Create a new (node.js) project by importing this github repository (in plmshift, after creating a project, click on + in the top toolbar, for Quick create).
 3. Visit the homepage of your newly created website: there you will find a link to the diagram editor that will automatically connect to your server.
 
 # Managing multiple independent sessions
